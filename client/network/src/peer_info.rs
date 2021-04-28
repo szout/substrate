@@ -138,8 +138,11 @@ pub struct Node<'a>(&'a NodeInfo);
 
 impl<'a> Node<'a> {
 	/// Returns the endpoint of an established connection to the peer.
-	pub fn endpoint(&self) -> &'a ConnectedPoint {
-		&self.0.endpoints[0] // `endpoints` are non-empty by definition
+	///
+	/// Returns `None` if we are disconnected. It can happen when we are
+	/// disconnected, however the node is still in cache for `CACHE_EXPIRE` period.
+	pub fn endpoint(&self) -> Option<&'a ConnectedPoint> {
+		self.0.endpoints.get(0)
 	}
 
 	/// Returns the latest version information we know of.
