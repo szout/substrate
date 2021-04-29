@@ -248,5 +248,5 @@ pub trait StateApi<Hash> {
 		block: Hash,
 		targets: Option<String>,
 		storage_keys: Option<String>,
-	) -> FutureResult<sp_rpc::tracing::TraceBlockResponse>;
+	) -> FutureResult<String>;
 }

@@ -72,7 +72,9 @@ pub enum Error {
 	#[error("Missing block component: {0}")]
 	MissingBlockComponent(String),
 	#[error("Dispatch error: {0}")]
-	Dispatch(String)
+	Dispatch(String),
+	#[error("Failed to serialize payload: {0}")]
+	SerializeJson(String)
 }
 
 struct BlockSubscriber {
@@ -208,7 +210,7 @@ impl<Block, Client> BlockExecutor<Block, Client>
 	/// Execute block, record all spans and events belonging to `Self::targets`
 	/// and filter out events which do not have keys starting with one of the
 	/// prefixes in `Self::storage_keys`.
-	pub fn trace_block(&self) -> Result<TraceBlockResponse> {
+	pub fn trace_block(&self) -> Result<String> {
 		tracing::debug!(target: "state_tracing", "Tracing block: {}", self.block);
 		// Prepare the block
 		let id = BlockId::Hash(self.block);
@@ -271,21 +273,28 @@ impl<Block, Client> BlockExecutor<Block, Client>
 			.collect();
 		tracing::debug!(target: "state_tracing", "Captured {} spans and {} events", spans.len(), events.len());
 
-		let approx_payload_size = BASE_PAYLOAD + events.len() * AVG_EVENT + spans.len() * AVG_SPAN;
-		let response = if approx_payload_size > MAX_PAYLOAD {
-				TraceBlockResponse::TraceError(TraceError {
-					error:
-						"Payload likely exceeds max payload size of RPC server.".to_string()
-				})
-		} else {
-			TraceBlockResponse::BlockTrace(BlockTrace {
+		// let approx_payload_size = BASE_PAYLOAD + events.len() * AVG_EVENT + spans.len() * AVG_SPAN;
+		let block_trace = TraceBlockResponse::BlockTrace(BlockTrace {
 				block_hash: block_id_as_string(id),
 				parent_hash: block_id_as_string(parent_id),
 				tracing_targets: targets.to_string(),
 				storage_keys: storage_keys.to_string(),
 				spans,
 				events,
-			})
+			});
+		let block_trace = serde_json::to_string(&block_trace)
+			.map_err(|e| Error::SerializeJson(format!("{}", e)))?;
+
+		let approx_payload_size = block_trace.len() + BASE_PAYLOAD;
+		let response = if approx_payload_size > MAX_PAYLOAD {
+			let trace_error = TraceBlockResponse::TraceError(TraceError {
+				error:
+					"Payload likely exceeds max payload size of RPC server.".to_string()
+			});
+			serde_json::to_string(&trace_error)
+				.map_err(|e| Error::SerializeJson(format!("{}", e)))?
+		} else {
+			block_trace
 		};
 
 		Ok(response)
